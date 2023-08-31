@@ -1,28 +1,27 @@
 require("dotenv").config();
-console.clear();
 
 import DiscordSocket from "./utils/discordSocket";
-import Message from "./utils/message";
+import Message from "./utils/message"; // Type
 
-const discordSocket = new DiscordSocket(process.env.TOKEN || "");
+const client = new DiscordSocket();
 
-discordSocket.connect();
-
-discordSocket.on("MESSAGE_CREATE", (event) => {
-  const message = new Message(event);
-  const prefix = ".";
-
+// Event Message
+client.on("MESSAGE_CREATE", (message: Message) => {
+  const prefix = process.env.PREFIX || "-";
   if (!message.content.startsWith(prefix)) return;
 
-  if (message.content == ".test") {
-    message.channel.send(
-      `Olá ${message.author.username}, você está no canal *${message.channel.name}* (\`${message.channel.id}\`)`
-    );
+  const cmd = message.content.slice(prefix.length);
+
+  switch (cmd.toLowerCase()) {
+    case "ping":
+      message.reply(`> ## 🏓 | Pong!!!`);
+      break;
   }
-
-  console.log(`[LOG] <user> executou o comando ${message.content}`);
 });
 
-discordSocket.on("READY", (event) => {
-  console.log(`[SYS] ${event.user.username} status: Online!\n`);
+// Event Ready
+client.on("READY", () => {
+  console.log(`[SYS]: ${client.user.username} status: Online!!!`);
 });
+
+client.connect(process.env.TOKEN || "");

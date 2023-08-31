@@ -1,28 +1,36 @@
 import WebSocket from "ws";
 
+import Message from "./message";
+
+import { APIConnect } from "./APIConnect";
+import { TEventName } from "./types";
+
 export = class DiscordSocket {
   private GATEWAY_URL: string;
-  private TOKEN: string;
   private socket: WebSocket | null;
   private eventHandlers: { [eventName: string]: (eventData: any) => void };
+  private api: APIConnect | null = null;
 
-  constructor(token: string) {
+  public user: any;
+  public guilds: any;
+  public channels: any;
+
+  constructor() {
     this.GATEWAY_URL = "wss://gateway.discord.gg";
-    this.TOKEN = token;
     this.socket = null;
     this.eventHandlers = {};
+
+    return this;
   }
 
-  public connect(): void {
+  public connect(token: string): void {
     this.socket = new WebSocket(this.GATEWAY_URL);
-
+    this.api = new APIConnect(token);
     this.socket.onopen = () => {
-      // console.log("Conexão estabelecida com a API de sockets do Discord");
-
-      this.sendIdentify(this.TOKEN);
+      this.sendIdentify(token);
     };
 
-    this.socket.onclose = (event) => {
+    this.socket.onclose = (event: any) => {
       console.log(
         "Conexão fechada com a API de sockets do Discord:",
         event.code,
@@ -30,7 +38,7 @@ export = class DiscordSocket {
       );
     };
 
-    this.socket.onmessage = (event) => {
+    this.socket.onmessage = (event: any) => {
       const message = JSON.parse(event.data.toString());
 
       switch (message.op) {
@@ -41,15 +49,13 @@ export = class DiscordSocket {
           this.startHeartbeat(message.d.heartbeat_interval);
           break;
         case 11:
-          // console.log("Heartbeat ACK recebido");
           break;
         default:
           break;
-        // console.log("Mensagem desconhecida recebida:", message);
       }
     };
 
-    this.socket.onerror = (error) => {
+    this.socket.onerror = (error: any) => {
       console.error("Erro na conexão com a API de sockets do Discord:", error);
     };
   }
@@ -88,16 +94,50 @@ export = class DiscordSocket {
     }, interval);
   }
 
-  public handleEvent(event: any): void {
-    const eventName = event.t;
-    if (eventName && this.eventHandlers[eventName]) {
-      this.eventHandlers[eventName](event.d);
+  public sendMessage(channel: string, data: any, type: "reply" | "send"): void {
+    var contentBuilder: any = {};
+
+    if (typeof data.content == "string") {
+      contentBuilder.content = data.content;
     } else {
-      // console.log("Evento desconhecido:", eventName);
+      contentBuilder = { ...data.content };
+    }
+
+    if (type == "reply")
+      contentBuilder.message_reference = {
+        message_id: data.m.id,
+        guild_id: data.m.guild_id,
+        channel_id: data.m.channel_id,
+      };
+
+    if (this.api !== null) {
+      this.api.sendMessage(channel, contentBuilder);
     }
   }
 
-  public on(eventName: string, handler: (eventData: any) => void): void {
+  public handleEvent(event: any): void {
+    const eventName = event.t as string;
+    if (eventName && this.eventHandlers[eventName]) {
+      switch (eventName) {
+        case "READY":
+          this.user = event.d.user;
+          this.guilds = event.d.guilds;
+
+          this.eventHandlers[eventName](event.d);
+          break;
+        case "MESSAGE_CREATE":
+          const msg = new Message(this, event.d);
+          this.eventHandlers[eventName](msg);
+          break;
+        default:
+          this.eventHandlers[eventName](event.d);
+          break;
+      }
+    } else {
+    }
+  }
+
+  public on(eventName: TEventName, handler: (eventData: any) => void): void {
     this.eventHandlers[eventName] = handler;
   }
 
